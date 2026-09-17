@@ -23,6 +23,7 @@ group :development do
   gem "paper_trail"
   gem "paperclip"
   gem "rails", "~> 8"
+  gem "ransack"
   gem "shrine"
   gem "ruby_llm"
   gem "rubocop-rspec"

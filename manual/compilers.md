@@ -18,6 +18,7 @@ This list is an evergeen list of currently available compilers.
 * [Noticed](compiler_noticed.md)
 * [PaperTrail](compiler_papertrail.md)
 * [Paperclip](compiler_paperclip.md)
+* [Ransack](compiler_ransack.md)
 * [RubyLLM](compiler_rubyllm.md)
 * [Shrine](compiler_shrine.md)
 <!-- END_COMPILER_LIST -->
