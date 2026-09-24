@@ -39,12 +39,19 @@ module Tapioca
       # # typed: true
       # class Chat
       #   include RubyLLM::ActiveRecord::ChatMethods
+      #
+      #   Elem = type_member { { fixed: ::RubyLLM::Message } }
       # end
       # ~~~
       #
       # The module is declared rather than re-implemented, so `ask`, `with_instructions`,
       # `with_runtime_instructions` and the rest keep the signatures they have in the gem RBI. Models that
       # never call an `acts_as_*` method are left alone.
+      #
+      # Since ruby_llm 2.0 `ChatMethods` includes `Enumerable` and hands `each` over to the underlying
+      # `RubyLLM::Chat`, which yields `RubyLLM::Message`s. A class that includes a generic module has to
+      # re-declare its type members, so the chat model gets `Elem` fixed to that; on older versions,
+      # where the module is not enumerable, nothing is added.
       class RubyLLM < Tapioca::Dsl::Compiler
         ConstantType = type_member { { fixed: T.class_of(::ActiveRecord::Base) } }
 
@@ -59,6 +66,11 @@ module Tapioca
           "RubyLLM::ActiveRecord::MessageLegacyMethods",
         ] #: Array[String]
 
+        # What `each` yields for the mixins that are `Enumerable`.
+        ELEMS = {
+          "RubyLLM::ActiveRecord::ChatMethods" => "::RubyLLM::Message",
+        } #: Hash[String, String]
+
         # @override
         #: -> void
         def decorate
@@ -66,7 +78,19 @@ module Tapioca
 
           root.create_path(constant) do |model|
             mixins.each { |name| model.create_include(name) }
+
+            elem = enumerable_elem(mixins)
+            model.create_type_variable("Elem", type: "type_member", fixed: elem) if elem
           end
+        end
+
+        private
+
+        #: (Array[String] mixins) -> String?
+        def enumerable_elem(mixins)
+          return unless constant < ::Enumerable
+
+          mixins.filter_map { |name| ELEMS[name] }.first
         end
 
         class << self

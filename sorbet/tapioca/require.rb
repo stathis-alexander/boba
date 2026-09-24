@@ -13,8 +13,6 @@ require "rails/all"
 require "ruby_llm/active_record/acts_as"
 require "ruby_llm/active_record/chat_methods"
 require "ruby_llm/active_record/message_methods"
-require "ruby_llm/active_record/model_methods"
-require "ruby_llm/active_record/tool_call_methods"
 require "rails/generators"
 require "rails/generators/app_base"
 

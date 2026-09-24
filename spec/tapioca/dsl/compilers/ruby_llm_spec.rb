@@ -8,8 +8,6 @@ require "rails"
 require "ruby_llm"
 require "ruby_llm/active_record/chat_methods"
 require "ruby_llm/active_record/message_methods"
-require "ruby_llm/active_record/model_methods"
-require "ruby_llm/active_record/tool_call_methods"
 require "ruby_llm/active_record/acts_as"
 
 module Tapioca
@@ -18,6 +16,10 @@ module Tapioca
       class RubyLLMSpec < ::DslSpec
         before do
           ::ActiveRecord::Base.establish_connection(adapter: "sqlite3", database: ":memory:")
+          # Including `ActsAs` defaults both stores to the gem's own Active Record models. Loading those
+          # would add them to the constants every other compiler's spec gathers, and nothing here reads them.
+          ::RubyLLM.config.model_registry_store ||= ::Object
+          ::RubyLLM.config.batch_store ||= ::Object
           ::ActiveRecord::Base.include(::RubyLLM::ActiveRecord::ActsAs)
         end
 
@@ -81,6 +83,28 @@ module Tapioca
 
               refute_includes(rbi, "include RubyLLM::ActiveRecord::ActsAs\n")
               refute_includes(rbi, "extend RubyLLM::ActiveRecord::ActsAs::ClassMethods\n")
+            end
+
+            it "re-declares the Enumerable type member for a chat" do
+              add_ruby_file("schema.rb", <<~RUBY)
+                ActiveRecord::Migration.suppress_messages do
+                  ActiveRecord::Schema.define do
+                    create_table :chats do |t|
+                      t.string :model_id
+                    end
+                  end
+                end
+              RUBY
+
+              add_ruby_file("chat.rb", <<~RUBY)
+                class Chat < ActiveRecord::Base
+                  acts_as_chat
+                end
+              RUBY
+
+              rbi = rbi_for(:Chat)
+
+              assert_includes(rbi, "Elem = type_member { { fixed: ::RubyLLM::Message } }\n")
             end
           end
         end

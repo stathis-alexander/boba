@@ -33,9 +33,16 @@ This compiler will produce the RBI file `chat.rbi` with the following content:
 # typed: true
 class Chat
   include RubyLLM::ActiveRecord::ChatMethods
+
+  Elem = type_member { { fixed: ::RubyLLM::Message } }
 end
 ~~~
 
 The module is declared rather than re-implemented, so `ask`, `with_instructions`,
 `with_runtime_instructions` and the rest keep the signatures they have in the gem RBI. Models that
 never call an `acts_as_*` method are left alone.
+
+Since ruby_llm 2.0 `ChatMethods` includes `Enumerable` and hands `each` over to the underlying
+`RubyLLM::Chat`, which yields `RubyLLM::Message`s. A class that includes a generic module has to
+re-declare its type members, so the chat model gets `Elem` fixed to that; on older versions,
+where the module is not enumerable, nothing is added.
