@@ -3,6 +3,8 @@
 
 return unless defined?(ActsAsTaggableOn)
 
+require "tapioca/dsl/helpers/active_record_constants_helper"
+
 module Tapioca
   module Dsl
     module Compilers
@@ -68,13 +70,37 @@ module Tapioca
       #     sig { params(limit: Integer).returns(T.untyped) }
       #     def top_tags(limit = 10); end
       #   end
+      #
+      #   module GeneratedAssociationRelationMethods
+      #     sig { params(context: T.untyped, options: T.untyped).returns(::ActsAsTaggableOn::Tag::PrivateRelation) }
+      #     def tag_counts_on(context, options = {}); end
+      #
+      #     sig { params(tags: T.untyped, options: T.untyped).returns(PrivateAssociationRelation) }
+      #     def tagged_with(tags, options = {}); end
+      #   end
+      #
+      #   module GeneratedRelationMethods
+      #     sig { params(context: T.untyped, options: T.untyped).returns(::ActsAsTaggableOn::Tag::PrivateRelation) }
+      #     def tag_counts_on(context, options = {}); end
+      #
+      #     sig { params(tags: T.untyped, options: T.untyped).returns(PrivateRelation) }
+      #     def tagged_with(tags, options = {}); end
+      #   end
       # end
       # ~~~
       #
       # The mixins are declared rather than re-implemented, so `tagged_with`, `tag_list_on` and the rest keep
       # the signatures they have in the gem RBI. Only the per-context methods, which exist for the contexts of
       # this model alone, are generated.
+      #
+      # The relation side is the exception. `ActiveRecord::Relation` reaches the class methods by delegating to
+      # the model class, which Sorbet cannot follow, so `Post.published.tagged_with(...)` does not type-check at
+      # all. The two finders that answer a relation are re-stated on the relation modules: `tagged_with`
+      # narrows the receiver, and `tag_counts_on` answers a relation of `ActsAsTaggableOn::Tag` rather than
+      # of the model. Without the relations compiler both stay untyped.
       class ActsAsTaggableOn < Tapioca::Dsl::Compiler
+        include Helpers::ActiveRecordConstantsHelper
+
         ConstantType = type_member { { fixed: T.class_of(::ActiveRecord::Base) } }
 
         # Every `acts_as_taggable_on` call installs this set; the names are fixed, so there is nothing to
@@ -96,6 +122,8 @@ module Tapioca
             tag_types.each do |tag_type|
               create_context_methods(model, tag_type)
             end
+
+            create_relation_methods(model)
           end
         end
 
@@ -110,6 +138,36 @@ module Tapioca
         end
 
         private
+
+        #: (RBI::Scope model) -> void
+        def create_relation_methods(model)
+          relations_typed = compiler_enabled?("ActiveRecordRelations")
+          tag_relation = relations_typed ? "::ActsAsTaggableOn::Tag::PrivateRelation" : "T.untyped"
+
+          [
+            [RelationMethodsModuleName, RelationClassName],
+            [AssociationRelationMethodsModuleName, AssociationRelationClassName],
+          ].each do |module_name, relation_class|
+            relation_methods_module = model.create_module(module_name)
+
+            relation_methods_module.create_method(
+              "tagged_with",
+              parameters: [
+                create_param("tags", type: "T.untyped"),
+                create_opt_param("options", type: "T.untyped", default: "{}"),
+              ],
+              return_type: relations_typed ? relation_class : "T.untyped",
+            )
+            relation_methods_module.create_method(
+              "tag_counts_on",
+              parameters: [
+                create_param("context", type: "T.untyped"),
+                create_opt_param("options", type: "T.untyped", default: "{}"),
+              ],
+              return_type: tag_relation,
+            )
+          end
+        end
 
         #: (RBI::Scope model, String tag_type) -> void
         def create_context_methods(model, tag_type)

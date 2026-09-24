@@ -62,9 +62,31 @@ class Post
     sig { params(limit: Integer).returns(T.untyped) }
     def top_tags(limit = 10); end
   end
+
+  module GeneratedAssociationRelationMethods
+    sig { params(context: T.untyped, options: T.untyped).returns(::ActsAsTaggableOn::Tag::PrivateRelation) }
+    def tag_counts_on(context, options = {}); end
+
+    sig { params(tags: T.untyped, options: T.untyped).returns(PrivateAssociationRelation) }
+    def tagged_with(tags, options = {}); end
+  end
+
+  module GeneratedRelationMethods
+    sig { params(context: T.untyped, options: T.untyped).returns(::ActsAsTaggableOn::Tag::PrivateRelation) }
+    def tag_counts_on(context, options = {}); end
+
+    sig { params(tags: T.untyped, options: T.untyped).returns(PrivateRelation) }
+    def tagged_with(tags, options = {}); end
+  end
 end
 ~~~
 
 The mixins are declared rather than re-implemented, so `tagged_with`, `tag_list_on` and the rest keep
 the signatures they have in the gem RBI. Only the per-context methods, which exist for the contexts of
 this model alone, are generated.
+
+The relation side is the exception. `ActiveRecord::Relation` reaches the class methods by delegating to
+the model class, which Sorbet cannot follow, so `Post.published.tagged_with(...)` does not type-check at
+all. The two finders that answer a relation are re-stated on the relation modules: `tagged_with`
+narrows the receiver, and `tag_counts_on` answers a relation of `ActsAsTaggableOn::Tag` rather than
+of the model. Without the relations compiler both stay untyped.

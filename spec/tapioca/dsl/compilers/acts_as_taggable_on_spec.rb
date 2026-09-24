@@ -83,6 +83,62 @@ module Tapioca
               assert_includes(rbi, "class << self")
               assert_equal(2, rbi.scan("def top_skills(limit = 10); end").size)
             end
+
+            it "re-states the relation finders, untyped without the relations compiler" do
+              add_ruby_file("schema.rb", <<~RUBY)
+                ActiveRecord::Migration.suppress_messages do
+                  ActiveRecord::Schema.define do
+                    create_table :posts
+                  end
+                end
+              RUBY
+
+              add_ruby_file("post.rb", <<~RUBY)
+                class Post < ActiveRecord::Base
+                  acts_as_taggable_on :tags
+                end
+              RUBY
+
+              rbi = rbi_for(:Post)
+
+              assert_includes(rbi, "module GeneratedRelationMethods\n")
+              assert_includes(rbi, "module GeneratedAssociationRelationMethods\n")
+              assert_includes(rbi, "sig { params(tags: T.untyped, options: T.untyped).returns(T.untyped) }")
+              assert_includes(rbi, "sig { params(context: T.untyped, options: T.untyped).returns(T.untyped) }")
+            end
+
+            it "types the relation finders when the relations compiler is enabled" do
+              require "tapioca/dsl/compilers/active_record_relations"
+              activate_other_dsl_compilers(ActiveRecordRelations)
+
+              add_ruby_file("schema.rb", <<~RUBY)
+                ActiveRecord::Migration.suppress_messages do
+                  ActiveRecord::Schema.define do
+                    create_table :posts
+                  end
+                end
+              RUBY
+
+              add_ruby_file("post.rb", <<~RUBY)
+                class Post < ActiveRecord::Base
+                  acts_as_taggable_on :tags
+                end
+              RUBY
+
+              rbi = rbi_for(:Post)
+
+              assert_includes(rbi, "sig { params(tags: T.untyped, options: T.untyped).returns(PrivateRelation) }")
+              assert_includes(
+                rbi,
+                "sig { params(tags: T.untyped, options: T.untyped).returns(PrivateAssociationRelation) }",
+              )
+              assert_equal(
+                2,
+                rbi.scan(
+                  "sig { params(context: T.untyped, options: T.untyped).returns(::ActsAsTaggableOn::Tag::PrivateRelation) }",
+                ).size,
+              )
+            end
           end
         end
       end
