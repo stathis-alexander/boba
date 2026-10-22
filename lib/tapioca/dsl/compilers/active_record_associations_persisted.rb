@@ -56,19 +56,6 @@ module Tapioca
 
         private
 
-        #: -> Boba::Options::AssociationTypeOption
-        def association_type_option
-          @association_type_option ||= T.let(
-            Boba::Options::AssociationTypeOption.from_options(options) do |value, default_association_type_option|
-              add_error(<<~MSG.strip)
-                Unknown value for compiler option `ActiveRecordAssociationTypes` given: `#{value}`.
-                Proceeding with the default value: `#{default_association_type_option.serialize}`.
-              MSG
-            end,
-            T.nilable(Boba::Options::AssociationTypeOption),
-          )
-        end
-
         #: (RBI::Scope klass, (String | Symbol) association_name, ReflectionType reflection) -> void
         def populate_single_assoc_getter_setter(klass, association_name, reflection)
           association_class = type_for(reflection)
@@ -135,7 +122,6 @@ module Tapioca
         #: (ReflectionType reflection) -> String
         def single_association_type_for(reflection)
           association_class = type_for(reflection)
-          return as_nilable_type(association_class) unless association_type_option.persisted?
 
           if Boba::ActiveRecord::ReflectionService.required_reflection?(reflection)
             association_class
