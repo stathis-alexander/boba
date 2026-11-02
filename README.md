@@ -21,14 +21,11 @@ group :development do
 end
 ```
 
-We recommend you also use the `only` configuration option in your Tapioca config (typically `sorbet/tapioca/config.yml`) to specify only the Tapioca compilers you wish to use. For instance, the following is an example `tapioca/config.yml` using the Boba `ActiveRecord` compilers with the `persisted` options:
+We recommend you also use the `only` configuration option in your Tapioca config (typically `sorbet/tapioca/config.yml`) to specify only the Tapioca compilers you wish to use. For instance, the following is an example `tapioca/config.yml` using the Boba `ActiveRecord` compilers:
 
 ```yml
 gem:
 dsl:
-  compiler_options:
-    ActiveRecordColumnTypes: persisted
-    ActiveRecordAssociationTypes: persisted
   only:
     - ActiveRecordAssociationsPersisted
     - ActiveRecordColumnsPersisted
