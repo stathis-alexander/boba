@@ -12,28 +12,11 @@ module Tapioca
   module Dsl
     module Compilers
       # `Tapioca::Dsl::Compilers::ActiveRecordColumnsPersisted` is an extension of the default Tapioca compiler `Tapioca::Dsl::Compilers::ActiveRecordColumns`.
-      # It extends the `persisted` option of the `ActiveRecordColumnTypes` to respect not only database constraints, but
-      # also validations on the attributes in the model.
       #
       # [`ActiveRecord::Base`](https://api.rubyonrails.org/classes/ActiveRecord/Base.html).
       # This compiler is only responsible for defining the attribute methods that would be
       # created for columns and virtual attributes that are defined in the Active Record
       # model.
-      #
-      # This compiler accepts a `ActiveRecordColumnTypes` option that can be used to specify
-      # how the types of the column related methods should be generated. The option can be one of the following:
-      #  - `persisted` (_default_): The methods will be generated with the type that matches the actual database
-      #  column type as the return type. This means that if the column is a string, the method return type
-      #  will be `String`, but if the column is also nullable, then the return type will be `T.nilable(String)`. This
-      #  mode basically treats each model as if it was a valid and persisted model. Note that this makes typing
-      #  Active Record models easier, but does not match the behaviour of non-persisted or invalid models, which can
-      #  have all kinds of non-sensical values in their column attributes.
-      #  - `nilable`: All column methods will be generated with `T.nilable` return types. This is strictly the most
-      #  correct way to type the methods, but it can make working with the models more cumbersome, as you will have to
-      #  handle the `nil` cases explicitly using `T.must` or the safe navigation operator `&.`, even for valid
-      #  persisted models.
-      #  - `untyped`: The methods will be generated with `T.untyped` return types. This mode is practical if you are not
-      #  ready to start typing your models strictly yet, but still want to generate RBI files for them.
       #
       # For example, with the following model class:
       # ~~~rb
@@ -53,7 +36,7 @@ module Tapioca
       # end
       # ~~~
       #
-      # this compiler will, by default, produce the following methods in the RBI file
+      # this compiler will produce the following methods in the RBI file
       # `post.rbi`:
       #
       # ~~~rbi
@@ -115,16 +98,6 @@ module Tapioca
       # end
       # ~~~
       #
-      # However, if `ActiveRecordColumnTypes` is set to `nilable`, the `title` method will be generated as:
-      # ~~~rbi
-      #     sig { returns(T.nilable(::String)) }
-      #     def title; end
-      # ~~~
-      # and if the option is set to `untyped`, the `title` method will be generated as:
-      # ~~~rbi
-      #     sig { returns(T.untyped) }
-      #     def title; end
-      # ~~~
       class ActiveRecordColumnsPersisted < ::Tapioca::Dsl::Compilers::ActiveRecordColumns
         ConstantType = type_member { { fixed: T.class_of(ActiveRecord::Base) } }
 
@@ -134,21 +107,20 @@ module Tapioca
         def column_type_helper
           ::Tapioca::Dsl::Helpers::ActiveRecordColumnTypeHelper.new(
             constant,
-            column_type_option: column_type_option,
+            column_type_option: Helpers::ActiveRecordColumnTypeHelper::ColumnTypeOption::Persisted,
           )
         end
 
         #: (String attribute_name, ?String column_name) -> [String, String]
         def type_for(attribute_name, column_name = attribute_name)
+          column_type_helper = column_type_helper()
           return column_type_helper.send(:id_type) if attribute_name == "id"
 
-          column_type_for(column_name)
+          column_type_for(column_name, column_type_helper: column_type_helper)
         end
 
-        #: (String column_name) -> [String, String]
-        def column_type_for(column_name)
-          return ["T.untyped", "T.untyped"] if column_type_option.untyped?
-
+        #: (String column_name, column_type_helper: ::Tapioca::Dsl::Helpers::ActiveRecordColumnTypeHelper) -> [String, String]
+        def column_type_for(column_name, column_type_helper:)
           nilable_column = Boba::ActiveRecord::AttributeService.nilable_attribute?(constant, column_name)
 
           column_type = constant.attribute_types[column_name]
@@ -157,16 +129,15 @@ module Tapioca
             column_type,
             column_nullability: nilable_column,
           )
-          setter_type =
-            case column_type
-            when ActiveRecord::Enum::EnumType
-              column_type_helper.send(:enum_setter_type, column_type)
-            else
-              getter_type
-            end
+          setter_type = case column_type
+          when ActiveRecord::Enum::EnumType
+            column_type_helper.send(:enum_setter_type, column_type)
+          else
+            getter_type
+          end
 
           virtual_attribute = Boba::ActiveRecord::AttributeService.virtual_attribute?(constant, column_name)
-          if column_type_option.persisted? && (virtual_attribute || !nilable_column)
+          if virtual_attribute || !nilable_column
             [getter_type, setter_type]
           else
             getter_type = as_nilable_type(getter_type) unless column_type_helper.send(
